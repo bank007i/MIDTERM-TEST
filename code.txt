@@ -1,0 +1,64 @@
+const express = require('express');
+const mysql = require('mysql2');
+const app = express();
+const port = 3000;
+
+// ใช้ environment variables แทนการเก็บข้อมูล credentials ไว้ในโค้ด
+const db = mysql.createConnection({
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '1234',
+  database: process.env.DB_NAME || 'shopdee'
+});
+
+db.connect();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// ป้องกัน SQL Injection โดยใช้ prepared statements
+app.post('/product', function(req, res) {
+  const { productName, productDetail, price, cost, quantity } = req.body;
+  const sql = "INSERT INTO product (productName, productDetail, price, cost, quantity) VALUES (?, ?, ?, ?, ?)";
+  db.query(sql, [productName, productDetail, price, cost, quantity], function(err, result) {
+    if (err) throw err;
+    res.send({ 'message': 'บันทึกข้อมูลสำเร็จ', 'status': true });
+  });
+});
+
+app.get('/product/:id', function(req, res) {
+  const productID = req.params.id;
+  const sql = "SELECT * FROM product WHERE productID = ?";
+  db.query(sql, [productID], function(err, result) {
+    if (err) throw err;
+    res.send(result);
+  });
+});
+
+// ป้องกัน SQL Injection ในการล็อกอิน และใช้การเข้ารหัสรหัสผ่าน
+const bcrypt = require('bcrypt');
+app.post('/login', function(req, res) {
+  const { username, password } = req.body;
+  const sql = "SELECT * FROM customer WHERE username = ? AND isActive = 1";
+  db.query(sql, [username], function(err, result) {
+    if (err) throw err;
+    if (result.length > 0) {
+      const customer = result[0];
+      bcrypt.compare(password, customer.password, function(err, isMatch) {
+        if (err) throw err;
+        if (isMatch) {
+          customer['message'] = "เข้าสู่ระบบสำเร็จ";
+          customer['status'] = true;
+          res.send(customer);
+        } else {
+          res.send({ "message": "กรุณาระบุรหัสผ่านใหม่อีกครั้ง", "status": false });
+        }
+      });
+    } else {
+      res.send({ "message": "กรุณาระบุรหัสผ่านใหม่อีกครั้ง", "status": false });
+    }
+  });
+});
+
+app.listen(port, function() {
+  console.log(`server listening on port ${port}`);
+});
